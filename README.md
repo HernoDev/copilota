@@ -30,11 +30,27 @@ src/copilota/
 
 ## Instalación
 
+### Local (desde clon)
+
 ```bash
+git clone https://github.com/HernoDev/copilota.git
+cd copilota
 python3 -m venv venv
 source venv/bin/activate
 pip install -e .
 pip install -e ".[dev]"  # para desarrollo
+```
+
+### Directamente desde GitHub (sin clonar)
+
+```bash
+pip install git+https://github.com/HernoDev/copilota.git
+```
+
+Con dependencias de desarrollo:
+
+```bash
+pip install "git+https://github.com/HernoDev/copilota.git[dev]"
 ```
 
 ## Trasladar a otra máquina (VM)
