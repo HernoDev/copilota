@@ -7,6 +7,7 @@ Asistente de código local con RAG, multi-lenguaje y vector search.
 ```
 src/copilota/
 ├── cli.py              # CLI (Click)
+├── config.py           # Carga de configuración YAML
 ├── core/
 │   ├── embedder.py     # Generador de embeddings (sentence-transformers o mock)
 │   ├── indexer.py      # Orquesta: git repo → parser → chunks → vector DB
@@ -14,7 +15,9 @@ src/copilota/
 │   └── retriever.py    # Búsqueda vectorial con filtros
 ├── llm/
 │   ├── base.py         # Interfaz LLM (abstracta)
-│   └── ollama.py       # Stub Ollama (implementación futura)
+│   ├── factory.py      # Factory: crea el LLM correcto según config
+│   ├── ollama.py       # Stub LLM (modo test, sin servidor)
+│   └── ollama_real.py  # Ollama real (HTTP a API local)
 ├── parser/
 │   ├── base.py         # Interfaz BaseParser
 │   ├── registry.py     # ParserRegistry (registro dinámico)
@@ -26,6 +29,8 @@ src/copilota/
 └── storage/
     ├── models.py       # ASTNode, CodeChunk, NodeType
     └── vector_db.py    # Wrapper ChromaDB
+config/
+└── default.yaml        # Configuración por defecto
 ```
 
 ## Instalación
@@ -99,6 +104,50 @@ copilota info --mock-embeddings
 ```
 
 > `--mock-embeddings` usa vectores hash en vez de sentence-transformers. Útil para testing sin descargar modelos.
+
+## Configuración YAML
+
+El archivo `config/default.yaml` controla el comportamiento del LLM:
+
+```yaml
+llm:
+  enabled: false          # false = modo test (stub), true = LLM real
+  provider: ollama        # proveedor: "ollama" (extensible)
+  model: qwen2.5-coder    # modelo a usar
+  base_url: http://localhost
+  port: 11434
+  api_path: /api/generate
+  chat_api_path: /api/chat
+  temperature: 0.7
+  max_tokens: 2048
+  timeout: 120
+```
+
+### Modo test (por defecto)
+
+Con `enabled: false` (o sin archivo de config), Copilota usa un stub que simula respuestas. No necesita ningún servidor corriendo. Ideal para desarrollo y CI.
+
+### Modo real (Ollama)
+
+1. Instalar Ollama: `curl -fsSL https://ollama.ai/install.sh | sh`
+2. Descargar modelo: `ollama pull qwen2.5-coder`
+3. Crear `mi_config.yaml`:
+
+```yaml
+llm:
+  enabled: true
+  provider: ollama
+  model: qwen2.5-coder
+```
+
+4. Usar con la CLI:
+
+```bash
+copilota ask "¿Cómo funciona el auth?" -c mi_config.yaml
+copilota info -c mi_config.yaml
+```
+
+Todos los comandos aceptan `-c / --config` para apuntar a un archivo YAML personalizado.
 
 ## Cómo agregar un nuevo lenguaje
 
@@ -179,13 +228,60 @@ def _import_parsers():
     from copilota.parser import python, javascript, php, go, rust, mi_lenguaje
 ```
 
-## Agregar LLM real (Ollama)
+## Cómo agregar un proveedor LLM nuevo
 
-El stub en `src/copilota/llm/ollama.py` simula respuestas. Para conectar Ollama real:
+El sistema es extensible para cualquier proveedor que tenga una API HTTP.
 
-1. Instalar Ollama en la VM
-2. Descargar modelo: `ollama pull qwen2.5-coder`
-3. Reemplazar `OllamaLLM.generate()` y `chat()` con llamadas HTTP a `http://localhost:11434/api/generate`
+1. Crear `src/copilota/llm/mi_proveedor.py`:
+
+```python
+from copilota.config import LLMConfig
+from copilota.llm.base import BaseLLM
+
+
+class MiProveedorLLM(BaseLLM):
+    def __init__(self, config: LLMConfig):
+        self.config = config
+
+    async def generate(self, prompt, system_prompt=None, temperature=None, max_tokens=None):
+        import httpx
+        # Tu lógica HTTP aquí
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(self.config.generate_url, json={...})
+            return resp.json()["text"]
+
+    async def chat(self, messages, temperature=None, max_tokens=None):
+        import httpx
+        # Tu lógica HTTP aquí
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(self.config.chat_url, json={...})
+            return resp.json()["message"]["content"]
+```
+
+2. Registrar en la factory (`src/copilota/llm/factory.py`):
+
+```python
+def create_llm(config: AppConfig) -> BaseLLM:
+    if not config.llm.enabled:
+        return OllamaStub()
+    if config.llm.provider == "ollama":
+        return OllamaLLM(config.llm)
+    if config.llm.provider == "mi_proveedor":
+        from copilota.llm.mi_proveedor import MiProveedorLLM
+        return MiProveedorLLM(config.llm)
+    raise ValueError(f"Proveedor LLM no soportado: {config.llm.provider}")
+```
+
+3. Usar en config:
+
+```yaml
+llm:
+  enabled: true
+  provider: mi_proveedor
+  model: mi-modelo
+  base_url: https://api.mi-proveedor.com
+  port: 443
+```
 
 ## Stack
 
@@ -194,8 +290,9 @@ El stub en `src/copilota/llm/ollama.py` simula respuestas. Para conectar Ollama 
 | Parsing | tree-sitter (30+ lenguajes) |
 | Vector DB | ChromaDB (local, persistente) |
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
-| LLM | Ollama (stub, conectar después) |
+| LLM | Ollama (configurable, extensible) |
 | CLI | Click + Rich |
+| Config | YAML (pyyaml) |
 | API | FastAPI (pendiente) |
 
 ## Tests
