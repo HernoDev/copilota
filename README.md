@@ -37,6 +37,24 @@ pip install -e .
 pip install -e ".[dev]"  # para desarrollo
 ```
 
+## Trasladar a otra máquina (VM)
+
+Para copiar el proyecto sin el venv ni archivos de cache:
+
+```bash
+tar czf copilota.tar.gz copilota/ \
+  --exclude=copilota/venv \
+  --exclude=copilota/__pycache__ \
+  --exclude=copilota/.pytest_cache \
+  --exclude=copilota/src/copilota.egg-info
+
+# En la máquina destino:
+tar xzf copilota.tar.gz
+cd copilota
+python3 -m venv venv && source venv/bin/activate
+pip install -e .
+```
+
 ## Uso
 
 ### Indexar un repositorio
@@ -71,6 +89,8 @@ copilota info --mock-embeddings
 1. Crear `src/copilota/parser/mi_lenguaje.py`:
 
 ```python
+from pathlib import Path
+
 import tree_sitter_mylang as tsm
 from tree_sitter import Language, Parser
 from copilota.parser.base import BaseParser
