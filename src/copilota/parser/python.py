@@ -1,0 +1,81 @@
+"""Parser para archivos Python usando tree-sitter."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import tree_sitter_python as tspython
+from tree_sitter import Language, Parser
+
+from copilota.parser.base import BaseParser
+from copilota.parser.registry import ParserRegistry
+from copilota.storage.models import ASTNode, NodeType
+
+TS_LANGUAGE = Language(tspython.language())
+
+
+@ParserRegistry.register
+class PythonParser(BaseParser):
+    @property
+    def language(self) -> str:
+        return "python"
+
+    @property
+    def file_extensions(self) -> tuple[str, ...]:
+        return (".py",)
+
+    def parse_file(self, filepath: Path, source: str) -> list[ASTNode]:
+        ts_parser = Parser(TS_LANGUAGE)
+        tree = ts_parser.parse(source.encode())
+        nodes: list[ASTNode] = []
+        self._walk(tree.root_node, source, str(filepath), nodes)
+        return nodes
+
+    def _walk(self, node, source: str, filepath: str, out: list[ASTNode]) -> None:
+        ast_node = self._to_ast_node(node, source, filepath)
+        if ast_node:
+            out.append(ast_node)
+        for child in node.children:
+            self._walk(child, source, filepath, out)
+
+    def _to_ast_node(self, node, source: str, filepath: str) -> ASTNode | None:
+        mapping: dict[str, NodeType] = {
+            "function_definition": NodeType.FUNCTION,
+            "class_definition": NodeType.CLASS,
+            "import_statement": NodeType.IMPORT,
+            "import_from_statement": NodeType.IMPORT,
+        }
+        node_type = mapping.get(node.type)
+        if not node_type:
+            return None
+
+        name = self._extract_name(node)
+        return ASTNode(
+            node_type=node_type,
+            name=name or "<anonymous>",
+            source_code=node.text.decode(),
+            start_line=node.start_point[0] + 1,
+            end_line=node.end_point[0] + 1,
+            filepath=filepath,
+            language=self.language,
+        )
+
+    def _extract_name(self, node: Node) -> str | None:
+        for child in node.children:
+            if child.type == "identifier":
+                return child.text.decode()
+        return None
+
+    def get_chunk_text(self, node: ASTNode) -> str:
+        lines = []
+        if node.node_type == NodeType.FUNCTION:
+            first_line = node.source_code.split("\n")[0]
+            lines.append(f"# Function: {node.name}")
+            lines.append(first_line)
+        elif node.node_type == NodeType.CLASS:
+            first_line = node.source_code.split("\n")[0]
+            lines.append(f"# Class: {node.name}")
+            lines.append(first_line)
+        else:
+            lines.append(node.source_code)
+        return "\n".join(lines)
