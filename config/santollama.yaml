@@ -1,0 +1,11 @@
+llm:
+  enabled: true
+  provider: ollama
+  model: qwen3.5:9b_90k
+  base_url: http://santollama:11434
+  port: 11434
+  api_path: /api/generate
+  chat_api_path: /api/chat
+  temperature: 0.7
+  max_tokens: 100000
+  timeout: 120
