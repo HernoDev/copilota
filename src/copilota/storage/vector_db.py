@@ -16,16 +16,15 @@ class VectorStore:
     COLLECTION_NAME = "copilota_code"
 
     def __init__(self, persist_directory: Path | None = None):
-        if persist_directory:
-            persist_directory.mkdir(parents=True, exist_ok=True)
-            self._client = chromadb.PersistentClient(
-                path=str(persist_directory),
-                settings=Settings(anonymized_telemetry=False),
-            )
-        else:
-            self._client = chromadb.EphemeralClient(
-                settings=Settings(anonymized_telemetry=False),
-            )
+        # Default: ~/.local/share/copilota
+        if persist_directory is None:
+            persist_directory = Path.home() / ".local" / "share" / "copilota"
+        
+        persist_directory.mkdir(parents=True, exist_ok=True)
+        self._client = chromadb.PersistentClient(
+            path=str(persist_directory),
+            settings=Settings(anonymized_telemetry=False),
+        )
         self._collection = self._client.get_or_create_collection(
             name=self.COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},

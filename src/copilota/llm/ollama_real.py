@@ -33,11 +33,13 @@ class OllamaLLM(BaseLLM):
         if system_prompt:
             payload["system"] = system_prompt
 
-        async with httpx.AsyncClient() as client:
+        # Timeout: 10s connect, 7200s read (2 horas) para respuestas muy largas
+        timeout = httpx.Timeout(connect=10.0, read=7200.0, write=10.0, pool=10.0)
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
                 self.config.generate_url,
                 json=payload,
-                timeout=self.config.timeout,
             )
             resp.raise_for_status()
             return resp.json()["response"]
@@ -60,11 +62,13 @@ class OllamaLLM(BaseLLM):
             },
         }
 
-        async with httpx.AsyncClient() as client:
+        # Timeout: 10s connect, 7200s read (2 horas) para respuestas muy largas
+        timeout = httpx.Timeout(connect=10.0, read=7200.0, write=10.0, pool=10.0)
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
                 self.config.chat_url,
                 json=payload,
-                timeout=self.config.timeout,
             )
             resp.raise_for_status()
             return resp.json()["message"]["content"]
