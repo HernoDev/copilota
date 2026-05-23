@@ -58,10 +58,30 @@ class AppConfig:
 def load_config(config_path: str | Path | None = None) -> AppConfig:
     merged = DEFAULT_CONFIG.copy()
 
-    if config_path and Path(config_path).exists():
-        with open(config_path) as f:
-            user_cfg = yaml.safe_load(f) or {}
-        merged = _deep_merge(merged, user_cfg)
+    # Buscar configuración en varios lugares
+    possible_configs = []
+    
+    if config_path:
+        possible_configs.append(Path(config_path))
+    
+    # Buscar en directorio actual
+    possible_configs.append(Path.cwd() / "config" / "default.yaml")
+    
+    # Buscar en home
+    possible_configs.append(Path.home() / ".copilota" / "config.yaml")
+    
+    # Buscar en sitio de instalación (para el paquete)
+    import inspect
+    pkg_dir = Path(inspect.getfile(__import__("copilota")).parent)
+    possible_configs.append(pkg_dir / "config" / "default.yaml")
+    
+    # Cargar el primer archivo que exista
+    for cfg_path in possible_configs:
+        if cfg_path.exists():
+            with open(cfg_path) as f:
+                user_cfg = yaml.safe_load(f) or {}
+            merged = _deep_merge(merged, user_cfg)
+            break
 
     llm_cfg = merged.get("llm", {})
     return AppConfig(
