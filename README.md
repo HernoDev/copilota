@@ -1,26 +1,36 @@
 # Copilota
 
-Asistente de código local con RAG, multi-lenguaje y vector search.
+Local code assistant with RAG, multi-language support, and vector search.
 
-## Arquitectura
+## Features
+
+- ✅ **Multi-language parsing**: Python, JavaScript, PHP, Go, Rust (extensible)
+- ✅ **Local RAG**: Ask questions about your codebase
+- ✅ **Vector search**: Find relevant code snippets
+- ✅ **Persistent storage**: Code index saved in `~/.local/share/copilota`
+- ✅ **Ollama integration**: Local LLM with configurable models
+- ✅ **Automatic config loading**: No need for `-c` flag
+- ✅ **Extensible architecture**: Add new languages or LLM providers
+
+## Architecture
 
 ```
 src/copilota/
 ├── cli.py              # CLI (Click)
-├── config.py           # Carga de configuración YAML
+├── config.py           # YAML configuration loader
 ├── core/
-│   ├── embedder.py     # Generador de embeddings (sentence-transformers o mock)
-│   ├── indexer.py      # Orquesta: git repo → parser → chunks → vector DB
-│   ├── rag.py          # Pipeline RAG: retriever + LLM → respuesta
-│   └── retriever.py    # Búsqueda vectorial con filtros
+│   ├── embedder.py     # Embedding generator (sentence-transformers or mock)
+│   ├── indexer.py      # Orchestrates: git repo → parser → chunks → vector DB
+│   ├── rag.py          # RAG pipeline: retriever + LLM → answer
+│   └── retriever.py    # Vector search with filters
 ├── llm/
-│   ├── base.py         # Interfaz LLM (abstracta)
-│   ├── factory.py      # Factory: crea el LLM correcto según config
-│   ├── ollama.py       # Stub LLM (modo test, sin servidor)
-│   └── ollama_real.py  # Ollama real (HTTP a API local)
+│   ├── base.py         # LLM interface (abstract)
+│   ├── factory.py      # Factory: creates correct LLM based on config
+│   ├── ollama.py       # Stub LLM (test mode, no server)
+│   └── ollama_real.py  # Real Ollama (HTTP to local API)
 ├── parser/
-│   ├── base.py         # Interfaz BaseParser
-│   ├── registry.py     # ParserRegistry (registro dinámico)
+│   ├── base.py         # BaseParser interface
+│   ├── registry.py     # ParserRegistry (dynamic registration)
 │   ├── python.py       # Parser Python
 │   ├── javascript.py   # Parser JS/TS
 │   ├── php.py          # Parser PHP
@@ -28,14 +38,14 @@ src/copilota/
 │   └── rust.py         # Parser Rust
 └── storage/
     ├── models.py       # ASTNode, CodeChunk, NodeType
-    └── vector_db.py    # Wrapper ChromaDB
+    └── vector_db.py    # ChromaDB wrapper
 config/
-└── default.yaml        # Configuración por defecto
+└── default.yaml        # Default configuration
 ```
 
-## Instalación
+## Installation
 
-### Local (desde clon)
+### Local (from clone)
 
 ```bash
 git clone https://github.com/HernoDev/copilota.git
@@ -43,24 +53,24 @@ cd copilota
 python3 -m venv venv
 source venv/bin/activate
 pip install -e .
-pip install -e ".[dev]"  # para desarrollo
+pip install -e ".[dev]"  # for development
 ```
 
-### Directamente desde GitHub (sin clonar)
+### Directly from GitHub (no clone)
 
 ```bash
 pip install git+https://github.com/HernoDev/copilota.git
 ```
 
-Con dependencias de desarrollo:
+With development dependencies:
 
 ```bash
 pip install "git+https://github.com/HernoDev/copilota.git[dev]"
 ```
 
-## Trasladar a otra máquina (VM)
+## Move to Another Machine (VM)
 
-Para copiar el proyecto sin el venv ni archivos de cache:
+To copy the project without venv or cache files:
 
 ```bash
 tar czf copilota.tar.gz copilota/ \
@@ -69,51 +79,95 @@ tar czf copilota.tar.gz copilota/ \
   --exclude=copilota/.pytest_cache \
   --exclude=copilota/src/copilota.egg-info
 
-# En la máquina destino:
+# On the destination machine:
 tar xzf copilota.tar.gz
 cd copilota
 python3 -m venv venv && source venv/bin/activate
 pip install -e .
 ```
 
-## Uso
+## Usage
 
-### Indexar un repositorio
-
-```bash
-copilota index /path/to/repo --mock-embeddings
-```
-
-### Buscar código relevante
+### Index a Repository
 
 ```bash
-copilota search "cómo funciona auth" --mock-embeddings
-copilota search "database connection" -l python -k 10 --mock-embeddings
+copilota index /path/to/repo
 ```
 
-### Preguntar con RAG
+### Search for Relevant Code
 
 ```bash
-copilota ask "¿Cómo funciona el sistema de login?" --mock-embeddings
+copilota search "how auth works"
+copilota search "database connection" -l python -k 10
 ```
 
-### Ver información
+### Ask Questions with RAG
 
 ```bash
-copilota info --mock-embeddings
+copilota ask "How does the login system work?"
 ```
 
-> `--mock-embeddings` usa vectores hash en vez de sentence-transformers. Útil para testing sin descargar modelos.
+### View Information
 
-## Configuración YAML
+```bash
+copilota info
+```
 
-El archivo `config/default.yaml` controla el comportamiento del LLM:
+## Ollama Integration
+
+### Setup
+
+1. **Install Ollama**:
+   ```bash
+   curl -fsSL https://ollama.ai/install.sh | sh
+   ```
+
+2. **Pull a model**:
+   ```bash
+   ollama pull qwen35:27b_64k
+   ```
+
+3. **Create global configuration** (optional, for automatic loading):
+   ```bash
+   mkdir -p ~/.copilota
+   cat > ~/.copilota/config.yaml << 'EOF'
+   llm:
+     enabled: true
+     provider: ollama
+     model: qwen35:27b_64k
+     base_url: http://localhost
+     port: 11434
+     temperature: 0.7
+     max_tokens: 2048
+     timeout: 120
+   EOF
+   ```
+
+4. **Use with CLI** (no `-c` flag needed if config exists):
+   ```bash
+   copilota ask "How does auth work?"
+   ```
+
+### Configuration Loading Order
+
+Copilota automatically loads configuration from the first existing file in this order:
+
+1. File specified with `-c / --config` flag
+2. `config/default.yaml` in current directory
+3. `~/.copilota/config.yaml` (global user config)
+4. Package installation directory
+
+This means you can set up a global configuration once and use Copilota anywhere without flags.
+
+## Configuration
+
+The YAML configuration file controls LLM behavior:
 
 ```yaml
 llm:
-  enabled: false          # false = modo test (stub), true = LLM real
-  provider: ollama        # proveedor: "ollama" (extensible)
-  model: qwen2.5-coder    # modelo a usar
+  enabled: false          # false = test mode (stub), true = real LLM
+  provider: ollama        # provider: "ollama" (extensible)
+  model: qwen2.5-coder    # model to use
   base_url: http://localhost
   port: 11434
   api_path: /api/generate
@@ -123,35 +177,23 @@ llm:
   timeout: 120
 ```
 
-### Modo test (por defecto)
+### Test Mode (Default)
 
-Con `enabled: false` (o sin archivo de config), Copilota usa un stub que simula respuestas. No necesita ningún servidor corriendo. Ideal para desarrollo y CI.
+With `enabled: false` (or no config file), Copilota uses a stub that simulates responses. No server needed. Ideal for development and CI.
 
-### Modo real (Ollama)
+### Real Mode (Ollama)
 
-1. Instalar Ollama: `curl -fsSL https://ollama.ai/install.sh | sh`
-2. Descargar modelo: `ollama pull qwen2.5-coder`
-3. Crear `mi_config.yaml`:
-
-```yaml
-llm:
-  enabled: true
-  provider: ollama
-  model: qwen2.5-coder
-```
-
-4. Usar con la CLI:
+Once you have Ollama running and a global config set up, simply run:
 
 ```bash
-copilota ask "¿Cómo funciona el auth?" -c mi_config.yaml
-copilota info -c mi_config.yaml
+copilota ask "How does the auth work?"
 ```
 
-Todos los comandos aceptan `-c / --config` para apuntar a un archivo YAML personalizado.
+No `-c` flag needed! The system will automatically find your configuration.
 
-## Cómo agregar un nuevo lenguaje
+## How to Add a New Language
 
-1. Crear `src/copilota/parser/mi_lenguaje.py`:
+1. Create `src/copilota/parser/mi_lenguaje.py`:
 
 ```python
 from pathlib import Path
@@ -162,8 +204,10 @@ from copilota.parser.base import BaseParser
 from copilota.parser.registry import ParserRegistry
 from copilota.storage.models import ASTNode, NodeType
 
+# Define the tree-sitter language
 TS_LANGUAGE = Language(tsm.language())
 
+# Register the parser
 @ParserRegistry.register
 class MyLangParser(BaseParser):
     @property
@@ -189,6 +233,7 @@ class MyLangParser(BaseParser):
             self._walk(child, source, filepath, out)
 
     def _to_ast_node(self, node, source, filepath) -> ASTNode | None:
+        # Map tree-sitter node types to our AST node types
         mapping = {
             "function_definition": NodeType.FUNCTION,
             "class_definition": NodeType.CLASS,
@@ -215,24 +260,24 @@ class MyLangParser(BaseParser):
         return node.source_code
 ```
 
-2. Instalar el grammar de tree-sitter:
+2. Install the tree-sitter grammar:
 
 ```bash
 pip install tree-sitter-mylang
 ```
 
-3. Importar en la CLI (`src/copilota/cli.py`), agregar al `_import_parsers()`:
+3. Import in the CLI (`src/copilota/cli.py`), add to `_import_parsers()`:
 
 ```python
 def _import_parsers():
     from copilota.parser import python, javascript, php, go, rust, mi_lenguaje
 ```
 
-## Cómo agregar un proveedor LLM nuevo
+## How to Add a New LLM Provider
 
-El sistema es extensible para cualquier proveedor que tenga una API HTTP.
+The system is extensible for any provider with an HTTP API.
 
-1. Crear `src/copilota/llm/mi_proveedor.py`:
+1. Create `src/copilota/llm/mi_proveedor.py`:
 
 ```python
 from copilota.config import LLMConfig
@@ -245,20 +290,20 @@ class MiProveedorLLM(BaseLLM):
 
     async def generate(self, prompt, system_prompt=None, temperature=None, max_tokens=None):
         import httpx
-        # Tu lógica HTTP aquí
+        # Your HTTP logic here
         async with httpx.AsyncClient() as client:
             resp = await client.post(self.config.generate_url, json={...})
             return resp.json()["text"]
 
     async def chat(self, messages, temperature=None, max_tokens=None):
         import httpx
-        # Tu lógica HTTP aquí
+        # Your HTTP logic here
         async with httpx.AsyncClient() as client:
             resp = await client.post(self.config.chat_url, json={...})
             return resp.json()["message"]["content"]
 ```
 
-2. Registrar en la factory (`src/copilota/llm/factory.py`):
+2. Register in the factory (`src/copilota/llm/factory.py`):
 
 ```python
 def create_llm(config: AppConfig) -> BaseLLM:
@@ -269,10 +314,10 @@ def create_llm(config: AppConfig) -> BaseLLM:
     if config.llm.provider == "mi_proveedor":
         from copilota.llm.mi_proveedor import MiProveedorLLM
         return MiProveedorLLM(config.llm)
-    raise ValueError(f"Proveedor LLM no soportado: {config.llm.provider}")
+    raise ValueError(f"Unsupported LLM provider: {config.llm.provider}")
 ```
 
-3. Usar en config:
+3. Use in config:
 
 ```yaml
 llm:
@@ -285,15 +330,15 @@ llm:
 
 ## Stack
 
-| Capa | Tecnología |
-|------|-----------|
-| Parsing | tree-sitter (30+ lenguajes) |
-| Vector DB | ChromaDB (local, persistente) |
+| Layer | Technology |
+|-------|------------|
+| Parsing | tree-sitter (30+ languages) |
+| Vector DB | ChromaDB (local, persistent) |
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
 | LLM | Ollama (configurable, extensible) |
 | CLI | Click + Rich |
 | Config | YAML (pyyaml) |
-| API | FastAPI (pendiente) |
+| API | FastAPI (pending) |
 
 ## Tests
 
@@ -301,4 +346,4 @@ llm:
 python -m pytest tests/ -v
 ```
 
-26 tests, todos pasando.
+26 tests, all passing.

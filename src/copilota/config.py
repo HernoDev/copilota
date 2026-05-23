@@ -72,7 +72,7 @@ def load_config(config_path: str | Path | None = None) -> AppConfig:
     
     # Buscar en sitio de instalación (para el paquete)
     import inspect
-    pkg_dir = Path(inspect.getfile(__import__("copilota")).parent)
+    pkg_dir = Path(inspect.getfile(__import__("copilota"))).parent
     possible_configs.append(pkg_dir / "config" / "default.yaml")
     
     # Cargar el primer archivo que exista
