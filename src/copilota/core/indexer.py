@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import fnmatch
 import hashlib
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 
 import git
