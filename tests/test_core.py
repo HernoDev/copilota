@@ -156,3 +156,14 @@ class TestIndexer:
         (git_repo / "new.py").write_text("def extra():\n    return 42\n")
         result = Indexer(tmp_store, embedder).index_repo(git_repo)
         assert result.files == 2
+
+    def test_exclude_patterns(self, git_repo, tmp_store, embedder):
+        (git_repo / "skip.py").write_text("def skip():\n    return 1\n")
+        (git_repo / "sub").mkdir()
+        (git_repo / "sub" / "other.py").write_text("def other():\n    return 2\n")
+        indexer = Indexer(tmp_store, embedder)
+        result = indexer.index_repo(git_repo, exclude=["skip.py", "sub"])
+        data = tmp_store._collection.get()
+        paths = sorted(m["filepath"] for m in data["metadatas"])
+        assert paths == ["app.py"]
+        assert result.files == 1

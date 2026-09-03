@@ -40,7 +40,8 @@ def main():
 @main.command()
 @click.argument("repo_path", type=click.Path(exists=True))
 @click.option("--mock-embeddings", is_flag=True, help="Usar embeddings mock")
-def index(repo_path: str, mock_embeddings: bool):
+@click.option("--exclude", "-e", multiple=True, help="Patrón para excluir (ej: reports, docs/*.md)")
+def index(repo_path: str, mock_embeddings: bool, exclude: tuple[str, ...]):
     """Indexa un repositorio Git en la base de vectores (reindex completo del repo)."""
     _import_parsers()
     console.print(f"Indexando repo: [bold cyan]{repo_path}[/bold cyan]")
@@ -48,7 +49,7 @@ def index(repo_path: str, mock_embeddings: bool):
     embedder, store = _get_components(mock_embeddings)
     indexer = Indexer(store, embedder)
 
-    result = indexer.index_repo(repo_path)
+    result = indexer.index_repo(repo_path, exclude=list(exclude))
     console.print(
         f"[green]✓[/green] Indexados [bold]{result.chunks}[/bold] chunks "
         f"de [bold]{result.files}[/bold] archivos.\n"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,16 +40,19 @@ class Indexer:
         self._store = vector_store
         self._embedder = embedder
 
-    def index_repo(self, repo_path: str | Path) -> IndexResult:
+    def index_repo(self, repo_path: str | Path, exclude: list[str] | None = None) -> IndexResult:
         repo = git.Repo(str(Path(repo_path).resolve()), search_parent_directories=True)
         repo_path = Path(repo.working_tree_dir)
         repo_id = str(repo_path)
+        exclude = exclude or []
 
         self._store.delete_by_repo(repo_id)
 
         files = 0
         total_chunks = 0
         for rel_path in self._iter_files(repo, repo_path):
+            if self._is_excluded(rel_path, exclude):
+                continue
             if not ParserRegistry.has_parser_for_file(rel_path):
                 continue
             try:
@@ -58,6 +62,16 @@ class Indexer:
                 continue
 
         return IndexResult(repo_id=repo_id, files=files, chunks=total_chunks)
+
+    @staticmethod
+    def _is_excluded(rel_path: Path, patterns: list[str]) -> bool:
+        s = rel_path.as_posix()
+        for pattern in patterns:
+            if fnmatch(s, pattern):
+                return True
+            if fnmatch(s, pattern.rstrip("/") + "/*"):
+                return True
+        return False
 
     def _iter_files(self, repo: git.Repo, repo_path: Path):
         raw = repo.git.ls_files("--cached", "--others", "--exclude-standard")
