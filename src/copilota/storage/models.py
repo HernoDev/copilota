@@ -19,6 +19,7 @@ class NodeType(str, Enum):
     ENUM = "enum"
     CONSTANT = "constant"
     VARIABLE = "variable"
+    SECTION = "section"
 
 
 @dataclass

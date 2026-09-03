@@ -21,6 +21,7 @@ CHUNKED_NODE_TYPES = (
     NodeType.STRUCT,
     NodeType.TRAIT,
     NodeType.ENUM,
+    NodeType.SECTION,
 )
 
 

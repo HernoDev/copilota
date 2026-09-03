@@ -5,6 +5,7 @@ from textwrap import dedent
 
 from copilota.parser.go import GoParser
 from copilota.parser.javascript import JavaScriptParser
+from copilota.parser.markdown import MarkdownParser
 from copilota.parser.php import PHPParser
 from copilota.parser.python import PythonParser
 from copilota.parser.rust import RustParser
@@ -165,9 +166,67 @@ struct User {
         assert len(structs) >= 1
 
 
+class TestMarkdownParser:
+    def test_parse_sections_by_h2(self, tmp_path):
+        f = _write(tmp_path, "doc.md", """\
+# Titulo
+Intro del documento.
+
+## Seccion uno
+Contenido de la primera seccion con suficiente texto para superar el minimo.
+
+## Seccion dos
+Contenido de la segunda seccion con suficiente texto para superar el minimo.
+""")
+        parser = MarkdownParser()
+        nodes = parser.parse_file(f, f.read_text())
+        assert [n.name for n in nodes] == ["Seccion uno", "Seccion dos"]
+        assert all(n.node_type == NodeType.SECTION for n in nodes)
+        assert nodes[0].start_line == 4
+        assert "primera seccion" in nodes[0].source_code
+
+    def test_small_sections_filtered(self, tmp_path):
+        f = _write(tmp_path, "doc.md", """\
+# Titulo
+
+## Chica
+corta
+
+## Grande
+Seccion con contenido lo suficientemente largo como para superar el minimo de caracteres.
+""")
+        parser = MarkdownParser()
+        nodes = parser.parse_file(f, f.read_text())
+        assert [n.name for n in nodes] == ["Grande"]
+
+    def test_file_without_h2_is_single_chunk(self, tmp_path):
+        f = _write(tmp_path, "doc.md", "# Solo titulo\n" + "Texto. " * 30)
+        parser = MarkdownParser()
+        nodes = parser.parse_file(f, f.read_text())
+        assert len(nodes) == 1
+        assert nodes[0].name == "Solo titulo"
+
+    def test_get_chunk_text_is_full_section(self, tmp_path):
+        f = _write(tmp_path, "doc.md", """\
+# Titulo
+
+## Seccion
+Contenido de la seccion lo suficientemente largo como para superar el minimo.
+""")
+        parser = MarkdownParser()
+        nodes = parser.parse_file(f, f.read_text())
+        assert parser.get_chunk_text(nodes[0]) == nodes[0].source_code
+
+    def test_file_extensions(self):
+        assert MarkdownParser().file_extensions == (".md",)
+
+    def test_language(self):
+        assert MarkdownParser().language == "markdown"
+
+
 class TestParserRegistry:
     def test_supported_languages(self):
-        from copilota.parser import go, javascript, php, python, rust  # noqa: F401
+        from copilota.parser import go, javascript, markdown, php, python, rust  # noqa: F401
         from copilota.parser.registry import ParserRegistry
         langs = ParserRegistry.supported_languages()
         assert "python" in langs
@@ -175,6 +234,7 @@ class TestParserRegistry:
         assert "php" in langs
         assert "go" in langs
         assert "rust" in langs
+        assert "markdown" in langs
 
     def test_supported_extensions(self):
         from copilota.parser import go, javascript, php, python, rust  # noqa: F401

@@ -21,7 +21,7 @@ console = Console()
 
 
 def _import_parsers():
-    from copilota.parser import go, javascript, php, python, rust  # noqa: F401
+    from copilota.parser import go, javascript, markdown, php, python, rust  # noqa: F401
 
 
 def _get_components(mock_embeddings: bool = False):
