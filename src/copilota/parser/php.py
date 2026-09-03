@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import tree_sitter_php as tsphp
-from tree_sitter import Language, Parser
+from tree_sitter import Language, Node, Parser
 
 from copilota.parser.base import BaseParser
 from copilota.parser.registry import ParserRegistry
@@ -46,7 +46,6 @@ class PHPParser(BaseParser):
             "interface_declaration": NodeType.INTERFACE,
             "namespace_definition": NodeType.MODULE,
             "use_declaration": NodeType.IMPORT,
-            "class_declaration": NodeType.CLASS,
         }
         node_type = mapping.get(node.type)
         if not node_type:

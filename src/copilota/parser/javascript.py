@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import tree_sitter_javascript as tsjs
-from tree_sitter import Language, Parser
+from tree_sitter import Language, Node, Parser
 
 from copilota.parser.base import BaseParser
 from copilota.parser.registry import ParserRegistry
@@ -40,7 +40,6 @@ class JavaScriptParser(BaseParser):
 
     def _to_ast_node(self, node, source: str, filepath: str) -> ASTNode | None:
         mapping: dict[str, NodeType] = {
-            "function_declaration": NodeType.FUNCTION,
             "function_declaration": NodeType.FUNCTION,
             "method_definition": NodeType.METHOD,
             "class_declaration": NodeType.CLASS,

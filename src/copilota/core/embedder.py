@@ -13,7 +13,7 @@ class EmbeddingModel:
 
     def _check_mock_needed(self) -> bool:
         try:
-            from sentence_transformers import SentenceTransformer
+            from sentence_transformers import SentenceTransformer  # noqa: F401
             return False
         except ImportError:
             return True

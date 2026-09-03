@@ -33,8 +33,9 @@ class OllamaLLM(BaseLLM):
         if system_prompt:
             payload["system"] = system_prompt
 
-        # Timeout: 10s connect, 7200s read (2 horas) para respuestas muy largas
-        timeout = httpx.Timeout(connect=10.0, read=7200.0, write=10.0, pool=10.0)
+        timeout = httpx.Timeout(
+            connect=10.0, read=float(self.config.timeout), write=10.0, pool=10.0
+        )
 
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
@@ -62,8 +63,9 @@ class OllamaLLM(BaseLLM):
             },
         }
 
-        # Timeout: 10s connect, 7200s read (2 horas) para respuestas muy largas
-        timeout = httpx.Timeout(connect=10.0, read=7200.0, write=10.0, pool=10.0)
+        timeout = httpx.Timeout(
+            connect=10.0, read=float(self.config.timeout), write=10.0, pool=10.0
+        )
 
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(

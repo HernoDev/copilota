@@ -1,7 +1,5 @@
 """Tests para storage y vector DB."""
 
-from pathlib import Path
-
 import pytest
 
 from copilota.storage.models import ASTNode, CodeChunk, NodeType
@@ -84,3 +82,40 @@ class TestVectorStore:
         store.add_chunks([sample_chunk], [mock_embedding])
         store.clear()
         assert store.count() == 0
+
+    def test_document_stores_full_source(self, store, sample_chunk):
+        store.add_chunks([sample_chunk], [[0.1] * 384])
+        results = store.query([0.1] * 384, top_k=1)
+        assert results[0]["document"] == sample_chunk.node.source_code
+
+
+def _chunk_with_repo(repo: str, filepath: str = "a.py") -> CodeChunk:
+    node = ASTNode(
+        node_type=NodeType.FUNCTION,
+        name="f",
+        source_code="def f():\n    return 1",
+        start_line=1,
+        end_line=2,
+        filepath=filepath,
+        language="python",
+    )
+    return CodeChunk(
+        id=f"ch-{repo.rstrip('/').split('/')[-1]}-{filepath}",
+        node=node,
+        embedding_text="def f",
+        metadata={"repo": repo},
+    )
+
+
+class TestVectorStoreRepo:
+    def test_delete_by_repo(self, store):
+        store.add_chunks([_chunk_with_repo("/r/one")], [[0.1] * 384])
+        store.add_chunks([_chunk_with_repo("/r/two")], [[0.1] * 384])
+        store.delete_by_repo("/r/one")
+        assert store.count() == 1
+
+    def test_list_repos(self, store):
+        store.add_chunks([_chunk_with_repo("/r/one")], [[0.1] * 384])
+        store.add_chunks([_chunk_with_repo("/r/one", "b.py")], [[0.1] * 384])
+        store.add_chunks([_chunk_with_repo("/r/two")], [[0.1] * 384])
+        assert store.list_repos() == {"/r/one": 2, "/r/two": 1}

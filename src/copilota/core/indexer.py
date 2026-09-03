@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 
 import git
@@ -12,46 +13,67 @@ from copilota.parser.registry import ParserRegistry
 from copilota.storage.models import ASTNode, CodeChunk, NodeType
 from copilota.storage.vector_db import VectorStore
 
+CHUNKED_NODE_TYPES = (
+    NodeType.FUNCTION,
+    NodeType.METHOD,
+    NodeType.CLASS,
+    NodeType.INTERFACE,
+    NodeType.STRUCT,
+    NodeType.TRAIT,
+    NodeType.ENUM,
+)
+
+
+@dataclass
+class IndexResult:
+    repo_id: str
+    files: int
+    chunks: int
+
 
 class Indexer:
-    """Indexa repositorios Git en la vector DB."""
+    """Indexa repositorios Git en la vector DB, con un namespace por repo."""
 
     def __init__(self, vector_store: VectorStore, embedder: EmbeddingModel):
         self._store = vector_store
         self._embedder = embedder
 
-    def index_repo(self, repo_path: str | Path) -> int:
-        repo_path = Path(repo_path)
-        repo = git.Repo(str(repo_path))
-        total_chunks = 0
+    def index_repo(self, repo_path: str | Path) -> IndexResult:
+        repo = git.Repo(str(Path(repo_path).resolve()), search_parent_directories=True)
+        repo_path = Path(repo.working_tree_dir)
+        repo_id = str(repo_path)
 
-        for filepath in self._iter_tracked_files(repo):
-            if not ParserRegistry.has_parser_for_file(filepath):
+        self._store.delete_by_repo(repo_id)
+
+        files = 0
+        total_chunks = 0
+        for rel_path in self._iter_files(repo, repo_path):
+            if not ParserRegistry.has_parser_for_file(rel_path):
                 continue
             try:
-                chunks = self._index_file(repo_path / filepath)
-                total_chunks += chunks
+                total_chunks += self._index_file(repo_path, rel_path, repo_id)
+                files += 1
             except Exception:
                 continue
 
-        return total_chunks
+        return IndexResult(repo_id=repo_id, files=files, chunks=total_chunks)
 
-    def _iter_tracked_files(self, repo: git.Repo):
-        for blob in repo.head.commit.tree.traverse():
-            if blob.type == "blob":
-                yield Path(blob.path)
+    def _iter_files(self, repo: git.Repo, repo_path: Path):
+        raw = repo.git.ls_files("--cached", "--others", "--exclude-standard")
+        for rel in raw.splitlines():
+            rel_path = Path(rel)
+            if (repo_path / rel_path).is_file():
+                yield rel_path
 
-    def _index_file(self, filepath: Path) -> int:
-        source = filepath.read_text(encoding="utf-8", errors="ignore")
-        parser = ParserRegistry.get_for_file(filepath)
+    def _index_file(self, repo_path: Path, rel_path: Path, repo_id: str) -> int:
+        source = (repo_path / rel_path).read_text(encoding="utf-8", errors="ignore")
+        parser = ParserRegistry.get_for_file(rel_path)
 
-        nodes = parser.parse_file(filepath, source)
+        nodes = parser.parse_file(rel_path, source)
         if not nodes:
             return 0
 
-        self._store.delete_by_filepath(str(filepath))
-
-        chunks = self._create_chunks(nodes)
+        chunks = self._create_chunks(nodes, repo_id)
         if not chunks:
             return 0
 
@@ -60,23 +82,24 @@ class Indexer:
         self._store.add_chunks(chunks, embeddings)
         return len(chunks)
 
-    def _create_chunks(self, nodes: list[ASTNode]) -> list[CodeChunk]:
+    def _create_chunks(self, nodes: list[ASTNode], repo_id: str) -> list[CodeChunk]:
         chunks = []
         for node in nodes:
-            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD, NodeType.CLASS, NodeType.INTERFACE, NodeType.STRUCT, NodeType.TRAIT, NodeType.ENUM):
+            if node.node_type in CHUNKED_NODE_TYPES:
                 parser = ParserRegistry.get_for_language(node.language)
                 chunk_text = parser.get_chunk_text(node)
-                chunk_id = self._make_chunk_id(node)
+                chunk_id = self._make_chunk_id(repo_id, node)
                 chunks.append(
                     CodeChunk(
                         id=chunk_id,
                         node=node,
                         embedding_text=chunk_text,
+                        metadata={"repo": repo_id},
                     )
                 )
         return chunks
 
     @staticmethod
-    def _make_chunk_id(node: ASTNode) -> str:
-        raw = f"{node.filepath}:{node.start_line}:{node.name}"
+    def _make_chunk_id(repo_id: str, node: ASTNode) -> str:
+        raw = f"{repo_id}:{node.filepath}:{node.start_line}:{node.name}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]

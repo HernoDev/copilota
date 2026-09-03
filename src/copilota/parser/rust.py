@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import tree_sitter_rust as tsrust
-from tree_sitter import Language, Parser
+from tree_sitter import Language, Node, Parser
 
 from copilota.parser.base import BaseParser
 from copilota.parser.registry import ParserRegistry

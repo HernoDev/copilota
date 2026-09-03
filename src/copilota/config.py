@@ -7,7 +7,6 @@ from pathlib import Path
 
 import yaml
 
-
 DEFAULT_CONFIG = {
     "llm": {
         "enabled": False,

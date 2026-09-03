@@ -32,7 +32,7 @@ class VectorStore:
 
     def add_chunks(self, chunks: list[CodeChunk], embeddings: list[list[float]]) -> None:
         ids = [c.id for c in chunks]
-        texts = [c.embedding_text for c in chunks]
+        texts = [c.node.source_code for c in chunks]
         metadatas = [c.to_chroma_metadata() for c in chunks]
         self._collection.add(ids=ids, embeddings=embeddings, documents=texts, metadatas=metadatas)
 
@@ -57,6 +57,19 @@ class VectorStore:
         existing = self._collection.get(where={"filepath": filepath})
         if existing and existing["ids"]:
             self._collection.delete(ids=existing["ids"])
+
+    def delete_by_repo(self, repo: str) -> None:
+        existing = self._collection.get(where={"repo": repo})
+        if existing and existing["ids"]:
+            self._collection.delete(ids=existing["ids"])
+
+    def list_repos(self) -> dict[str, int]:
+        data = self._collection.get()
+        counts: dict[str, int] = {}
+        for meta in data.get("metadatas") or []:
+            repo = (meta or {}).get("repo", "<sin repo>")
+            counts[repo] = counts.get(repo, 0) + 1
+        return counts
 
     def count(self) -> int:
         return self._collection.count()

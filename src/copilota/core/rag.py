@@ -5,7 +5,6 @@ from __future__ import annotations
 from copilota.core.retriever import RetrievalResult, Retriever
 from copilota.llm.base import BaseLLM
 
-
 DEFAULT_SYSTEM_PROMPT = (
     "Eres un asistente experto en código. "
     "Responde preguntas basándote en los fragmentos de código proporcionados. "
@@ -25,8 +24,9 @@ class RAGPipeline:
         question: str,
         top_k: int = 5,
         language: str | None = None,
+        repo: str | None = None,
     ) -> dict:
-        results = self._retriever.search(question, top_k=top_k, language=language)
+        results = self._retriever.search(question, top_k=top_k, language=language, repo=repo)
 
         context = self._build_context(results)
         prompt = self._build_prompt(question, context)

@@ -3,9 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+
+import git
 
 from copilota.core.embedder import EmbeddingModel
 from copilota.storage.vector_db import VectorStore
+
+
+def resolve_repo(repo: str) -> str:
+    """Resuelve cualquier ruta dentro de un repo a su raíz (working tree)."""
+    p = Path(repo).resolve()
+    try:
+        return str(Path(git.Repo(str(p), search_parent_directories=True).working_tree_dir))
+    except Exception:
+        return str(p)
 
 
 @dataclass
@@ -31,12 +43,15 @@ class Retriever:
         query: str,
         top_k: int = 5,
         language: str | None = None,
+        repo: str | None = None,
     ) -> list[RetrievalResult]:
         query_embedding = self._embedder.encode_single(query)
 
-        filters = None
+        filters: dict[str, str] = {}
         if language:
-            filters = {"language": language}
+            filters["language"] = language
+        if repo:
+            filters["repo"] = resolve_repo(repo)
 
         raw_results = self._store.query(
             query_embedding=query_embedding,

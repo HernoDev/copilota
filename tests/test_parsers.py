@@ -3,12 +3,10 @@
 from pathlib import Path
 from textwrap import dedent
 
-import pytest
-
-from copilota.parser.python import PythonParser
+from copilota.parser.go import GoParser
 from copilota.parser.javascript import JavaScriptParser
 from copilota.parser.php import PHPParser
-from copilota.parser.go import GoParser
+from copilota.parser.python import PythonParser
 from copilota.parser.rust import RustParser
 from copilota.storage.models import NodeType
 
@@ -169,7 +167,7 @@ struct User {
 
 class TestParserRegistry:
     def test_supported_languages(self):
-        from copilota.parser import python, javascript, php, go, rust
+        from copilota.parser import go, javascript, php, python, rust  # noqa: F401
         from copilota.parser.registry import ParserRegistry
         langs = ParserRegistry.supported_languages()
         assert "python" in langs
@@ -179,7 +177,7 @@ class TestParserRegistry:
         assert "rust" in langs
 
     def test_supported_extensions(self):
-        from copilota.parser import python, javascript, php, go, rust
+        from copilota.parser import go, javascript, php, python, rust  # noqa: F401
         from copilota.parser.registry import ParserRegistry
         exts = ParserRegistry.supported_extensions()
         assert ".py" in exts
