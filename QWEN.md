@@ -58,6 +58,18 @@ pip install -e ".[dev]"  # for development with tests/linters
 pip install git+https://github.com/HernoDev/copilota.git
 ```
 
+#### Standalone installer (taskrunner / RAG use)
+
+`install.sh` sets up a dedicated, non-editable install in `~/.local/copilota`
+(own venv), verifies the binary, and wires the taskrunner's `.config`
+(`COPILOTA_PATH`) if taskrunner is installed. Idempotent — re-run it to
+update the install after code changes:
+
+```bash
+./install.sh                        # installs to ~/.local/copilota
+COPILOTA_HOME=/other/prefix ./install.sh
+```
+
 ### Commands
 
 ```bash

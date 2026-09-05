@@ -68,6 +68,18 @@ With development dependencies:
 pip install "git+https://github.com/HernoDev/copilota.git[dev]"
 ```
 
+### Standalone install (taskrunner / RAG)
+
+`install.sh` creates a dedicated venv in `~/.local/copilota`, installs the
+package (non-editable), verifies the binary, and configures the taskrunner's
+RAG settings if it is installed. Idempotent — re-run it to update the
+installation after code changes:
+
+```bash
+./install.sh                        # installs to ~/.local/copilota
+COPILOTA_HOME=/other/prefix ./install.sh
+```
+
 ## Move to Another Machine (VM)
 
 To copy the project without venv or cache files:

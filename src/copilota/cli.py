@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 
 import click
+import httpx
 from rich.console import Console
 from rich.table import Table
 
-from copilota.config import load_config
+from copilota.config import LLMConfig, load_config
 from copilota.core.embedder import EmbeddingModel
 from copilota.core.indexer import Indexer
 from copilota.core.rag import RAGPipeline
@@ -18,6 +19,14 @@ from copilota.parser.registry import ParserRegistry
 from copilota.storage.vector_db import VectorStore
 
 console = Console()
+
+
+def _fetch_models(config: LLMConfig) -> list[str]:
+    url = f"{config.full_url}/v1/models"
+    with httpx.Client(timeout=10.0) as client:
+        resp = client.get(url)
+        resp.raise_for_status()
+        return [m["id"] for m in resp.json().get("data", [])]
 
 
 def _import_parsers():
@@ -94,6 +103,19 @@ def search(query: str, language: str | None, repo: str | None, top_k: int, mock_
 @click.option("--top-k", "-k", default=5, help="Número de fragmentos de contexto")
 @click.option("--mock-embeddings", is_flag=True, help="Usar embeddings mock")
 @click.option("--config", "-c", default=None, help="Ruta a archivo de configuración YAML")
+@click.option(
+    "--model-select",
+    "model_select",
+    type=int,
+    default=None,
+    help="Seleccionar modelo por índice (ver: copilota models)",
+)
+@click.option(
+    "--model",
+    "model_name",
+    default=None,
+    help="Seleccionar modelo por nombre exacto",
+)
 def ask(
     question: str,
     language: str | None,
@@ -101,6 +123,8 @@ def ask(
     top_k: int,
     mock_embeddings: bool,
     config: str | None,
+    model_select: int | None,
+    model_name: str | None,
 ):
     """Haz una pregunta sobre el código indexado (RAG)."""
     _import_parsers()
@@ -108,6 +132,26 @@ def ask(
     retriever = Retriever(store, embedder)
 
     app_config = load_config(config) if config else load_config()
+
+    if model_select is not None or model_name is not None:
+        if model_select is not None:
+            try:
+                ids = _fetch_models(app_config.llm)
+            except Exception as e:
+                console.print(f"[red]No se pudo obtener la lista de modelos:[/red] {e}")
+                raise SystemExit(1)
+            if model_select < 1 or model_select > len(ids):
+                console.print(
+                    f"[red]Índice inválido:[/red] {model_select} "
+                    f"(rango 1-{len(ids)})"
+                )
+                raise SystemExit(1)
+            app_config.llm.model = ids[model_select - 1]
+            console.print(f"[dim]Modelo seleccionado: {app_config.llm.model}[/dim]")
+        elif model_name is not None:
+            app_config.llm.model = model_name
+            console.print(f"[dim]Modelo seleccionado: {model_name}[/dim]")
+
     llm = create_llm(app_config)
 
     rag = RAGPipeline(retriever, llm)
@@ -154,6 +198,27 @@ def context(query: str, repo: str | None, language: str | None, top_k: int, mock
         lines.append(r.document.rstrip())
         lines.append("```")
     print("\n".join(lines))
+
+
+@main.command()
+def models():
+    """Lista los modelos disponibles en el servidor LLM."""
+    app_config = load_config()
+    if not app_config.llm.enabled:
+        console.print("[yellow]LLM deshabilitado en la configuración.[/yellow]")
+        return
+    try:
+        ids = _fetch_models(app_config.llm)
+    except Exception as e:
+        console.print(f"[red]No se pudo conectar al servidor:[/red] {e}")
+        return
+    table = Table(title="Modelos disponibles")
+    table.add_column("#", style="cyan", justify="right")
+    table.add_column("Modelo")
+    for i, mid in enumerate(ids, 1):
+        marker = " ← actual" if mid == app_config.llm.model else ""
+        table.add_row(str(i), f"{mid}{marker}")
+    console.print(table)
 
 
 @main.command()

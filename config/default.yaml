@@ -1,11 +1,11 @@
 llm:
   enabled: true
-  provider: ollama
-  model: qwen35:27b_64k
-  base_url: http://localhost
-  port: 11434
-  api_path: /api/generate
-  chat_api_path: /api/chat
+  provider: openai
+  model: qwen3.8-27b-largo
+  base_url: http://santollama
+  port: 8080
+  api_path: /v1/chat/completions
+  chat_api_path: /v1/chat/completions
   temperature: 0.7
   max_tokens: 2048
-  timeout: 120
+  timeout: 300
