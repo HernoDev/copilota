@@ -16,6 +16,8 @@ TS_LANGUAGE = Language(tspython.language())
 
 @ParserRegistry.register
 class PythonParser(BaseParser):
+    _ts_parser: "Parser | None" = None
+
     @property
     def language(self) -> str:
         return "python"
@@ -25,8 +27,9 @@ class PythonParser(BaseParser):
         return (".py",)
 
     def parse_file(self, filepath: Path, source: str) -> list[ASTNode]:
-        ts_parser = Parser(TS_LANGUAGE)
-        tree = ts_parser.parse(source.encode())
+        if self._ts_parser is None:
+            self._ts_parser = Parser(TS_LANGUAGE)
+        tree = self._ts_parser.parse(source.encode())
         nodes: list[ASTNode] = []
         self._walk(tree.root_node, source, str(filepath), nodes)
         return nodes

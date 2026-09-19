@@ -13,6 +13,7 @@ class OpenAICompatibleLLM(BaseLLM):
 
     def __init__(self, config: LLMConfig | None = None):
         self.config = config or LLMConfig()
+        self._client: httpx.AsyncClient | None = None
 
     def _timeout(self) -> httpx.Timeout:
         return httpx.Timeout(
@@ -33,10 +34,20 @@ class OpenAICompatibleLLM(BaseLLM):
         }
 
     async def _post(self, payload: dict) -> str:
-        async with httpx.AsyncClient(timeout=self._timeout()) as client:
+        client = self._client or httpx.AsyncClient(timeout=self._timeout())
+        try:
             resp = await client.post(self.config.chat_url, json=payload)
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+            data = resp.json()
+            choices = data.get("choices")
+            if not choices:
+                return ""
+            message = choices[0].get("message", {})
+            content = message.get("content")
+            return content if content is not None else ""
+        finally:
+            if self._client is None:
+                await client.aclose()
 
     async def generate(
         self,

@@ -16,17 +16,20 @@ TS_LANGUAGE = Language(tsjs.language())
 
 @ParserRegistry.register
 class JavaScriptParser(BaseParser):
+    _ts_parser: "Parser | None" = None
+
     @property
     def language(self) -> str:
         return "javascript"
 
     @property
     def file_extensions(self) -> tuple[str, ...]:
-        return (".js", ".jsx", ".ts", ".tsx", ".mjs")
+        return (".js", ".jsx", ".mjs")
 
     def parse_file(self, filepath: Path, source: str) -> list[ASTNode]:
-        ts_parser = Parser(TS_LANGUAGE)
-        tree = ts_parser.parse(source.encode())
+        if self._ts_parser is None:
+            self._ts_parser = Parser(TS_LANGUAGE)
+        tree = self._ts_parser.parse(source.encode())
         nodes: list[ASTNode] = []
         self._walk(tree.root_node, source, str(filepath), nodes)
         return nodes

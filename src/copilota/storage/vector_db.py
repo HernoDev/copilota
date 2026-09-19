@@ -34,7 +34,14 @@ class VectorStore:
         ids = [c.id for c in chunks]
         texts = [c.node.source_code for c in chunks]
         metadatas = [c.to_chroma_metadata() for c in chunks]
-        self._collection.add(ids=ids, embeddings=embeddings, documents=texts, metadatas=metadatas)
+        batch_size = 512
+        for i in range(0, len(ids), batch_size):
+            self._collection.upsert(
+                ids=ids[i : i + batch_size],
+                embeddings=embeddings[i : i + batch_size],
+                documents=texts[i : i + batch_size],
+                metadatas=metadatas[i : i + batch_size],
+            )
 
     def query(
         self,
@@ -64,7 +71,7 @@ class VectorStore:
             self._collection.delete(ids=existing["ids"])
 
     def list_repos(self) -> dict[str, int]:
-        data = self._collection.get()
+        data = self._collection.get(include=["metadatas"])
         counts: dict[str, int] = {}
         for meta in data.get("metadatas") or []:
             repo = (meta or {}).get("repo", "<sin repo>")

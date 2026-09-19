@@ -23,6 +23,9 @@ CHUNKED_NODE_TYPES = (
     NodeType.TRAIT,
     NodeType.ENUM,
     NodeType.SECTION,
+    NodeType.IMPORT,
+    NodeType.MODULE,
+    NodeType.VARIABLE,
 )
 
 

@@ -16,6 +16,8 @@ TS_LANGUAGE = Language(tsgo.language())
 
 @ParserRegistry.register
 class GoParser(BaseParser):
+    _ts_parser: "Parser | None" = None
+
     @property
     def language(self) -> str:
         return "go"
@@ -25,8 +27,9 @@ class GoParser(BaseParser):
         return (".go",)
 
     def parse_file(self, filepath: Path, source: str) -> list[ASTNode]:
-        ts_parser = Parser(TS_LANGUAGE)
-        tree = ts_parser.parse(source.encode())
+        if self._ts_parser is None:
+            self._ts_parser = Parser(TS_LANGUAGE)
+        tree = self._ts_parser.parse(source.encode())
         nodes: list[ASTNode] = []
         self._walk(tree.root_node, source, str(filepath), nodes)
         return nodes
@@ -42,10 +45,12 @@ class GoParser(BaseParser):
         mapping: dict[str, NodeType] = {
             "function_declaration": NodeType.FUNCTION,
             "method_declaration": NodeType.METHOD,
-            "type_declaration": NodeType.STRUCT,
             "import_declaration": NodeType.IMPORT,
             "package_clause": NodeType.MODULE,
         }
+        if node.type == "type_declaration":
+            return self._handle_type_declaration(node, source, filepath)
+
         node_type = mapping.get(node.type)
         if not node_type:
             return None
@@ -60,6 +65,25 @@ class GoParser(BaseParser):
             filepath=filepath,
             language=self.language,
         )
+
+    def _handle_type_declaration(self, node, source: str, filepath: str) -> ASTNode | None:
+        for child in node.children:
+            if child.type != "type_spec":
+                continue
+            is_interface = any(
+                sub.type == "interface_type" for sub in child.children
+            )
+            type_name = self._extract_name(child)
+            return ASTNode(
+                node_type=NodeType.INTERFACE if is_interface else NodeType.STRUCT,
+                name=type_name or "<anonymous>",
+                source_code=child.text.decode(),
+                start_line=child.start_point[0] + 1,
+                end_line=child.end_point[0] + 1,
+                filepath=filepath,
+                language=self.language,
+            )
+        return None
 
     def _extract_name(self, node: Node) -> str | None:
         for child in node.children:

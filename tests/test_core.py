@@ -19,14 +19,8 @@ def embedder():
 
 
 @pytest.fixture
-def store():
-    s = VectorStore()
-    s.clear()
-    yield s
-    try:
-        s.clear()
-    except Exception:
-        pass
+def store(tmp_path):
+    return VectorStore(persist_directory=tmp_path / "chroma")
 
 
 @pytest.fixture

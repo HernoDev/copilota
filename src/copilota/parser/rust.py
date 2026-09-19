@@ -16,6 +16,8 @@ TS_LANGUAGE = Language(tsrust.language())
 
 @ParserRegistry.register
 class RustParser(BaseParser):
+    _ts_parser: "Parser | None" = None
+
     @property
     def language(self) -> str:
         return "rust"
@@ -25,8 +27,9 @@ class RustParser(BaseParser):
         return (".rs",)
 
     def parse_file(self, filepath: Path, source: str) -> list[ASTNode]:
-        ts_parser = Parser(TS_LANGUAGE)
-        tree = ts_parser.parse(source.encode())
+        if self._ts_parser is None:
+            self._ts_parser = Parser(TS_LANGUAGE)
+        tree = self._ts_parser.parse(source.encode())
         nodes: list[ASTNode] = []
         self._walk(tree.root_node, source, str(filepath), nodes)
         return nodes
@@ -67,6 +70,18 @@ class RustParser(BaseParser):
         for child in node.children:
             if child.type == "name":
                 return child.text.decode()
+        if node.type == "impl_item":
+            for child in node.children:
+                if child.type in ("type_path", "trait_ref"):
+                    return self._extract_type_path_name(child)
+        return None
+
+    def _extract_type_path_name(self, node: Node) -> str | None:
+        for child in node.children:
+            if child.type == "type_identifier":
+                return child.text.decode()
+            if child.type == "scoped_identifier":
+                return self._extract_type_path_name(child)
         return None
 
     def get_chunk_text(self, node: ASTNode) -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from importlib.metadata import version as pkg_version
 
 import click
 import httpx
@@ -22,15 +23,30 @@ console = Console()
 
 
 def _fetch_models(config: LLMConfig) -> list[str]:
-    url = f"{config.full_url}/v1/models"
-    with httpx.Client(timeout=10.0) as client:
-        resp = client.get(url)
-        resp.raise_for_status()
-        return [m["id"] for m in resp.json().get("data", [])]
+    if config.provider == "ollama":
+        url = f"{config.full_url}/api/tags"
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            return [m["name"] for m in resp.json().get("models", [])]
+    else:
+        url = f"{config.full_url}/v1/models"
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            return [m["id"] for m in resp.json().get("data", [])]
 
 
 def _import_parsers():
-    from copilota.parser import go, javascript, markdown, php, python, rust  # noqa: F401
+    from copilota.parser import (  # noqa: F401
+        go,
+        javascript,
+        markdown,
+        php,
+        python,
+        rust,
+        typescript,
+    )
 
 
 def _get_components(mock_embeddings: bool = False):
@@ -39,23 +55,37 @@ def _get_components(mock_embeddings: bool = False):
     return embedder, store
 
 
+def _run_async(coro):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import anyio.from_thread
+
+    return anyio.from_thread.run(coro)
+
+
 @click.group()
-@click.version_option("0.2.0")
-def main():
+@click.version_option(pkg_version("copilota"), prog_name="copilota")
+@click.option("--mock-embeddings", is_flag=True, default=False, help="Usar embeddings mock")
+@click.pass_context
+def main(ctx: click.Context, mock_embeddings: bool):
     """Copilota - Asistente de código local con RAG."""
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj["mock_embeddings"] = mock_embeddings
 
 
 @main.command()
 @click.argument("repo_path", type=click.Path(exists=True))
-@click.option("--mock-embeddings", is_flag=True, help="Usar embeddings mock")
 @click.option("--exclude", "-e", multiple=True, help="Patrón para excluir (ej: reports, docs/*.md)")
-def index(repo_path: str, mock_embeddings: bool, exclude: tuple[str, ...]):
+@click.pass_context
+def index(ctx: click.Context, repo_path: str, exclude: tuple[str, ...]):
     """Indexa un repositorio Git en la base de vectores (reindex completo del repo)."""
     _import_parsers()
     console.print(f"Indexando repo: [bold cyan]{repo_path}[/bold cyan]")
 
-    embedder, store = _get_components(mock_embeddings)
+    mock = ctx.obj.get("mock_embeddings", False)
+    embedder, store = _get_components(mock)
     indexer = Indexer(store, embedder)
 
     result = indexer.index_repo(repo_path, exclude=list(exclude))
@@ -71,10 +101,11 @@ def index(repo_path: str, mock_embeddings: bool, exclude: tuple[str, ...]):
 @click.option("--language", "-l", default=None, help="Filtrar por lenguaje")
 @click.option("--repo", "-r", default=None, help="Limitar a un repo (ruta del repositorio)")
 @click.option("--top-k", "-k", default=5, help="Número de resultados")
-@click.option("--mock-embeddings", is_flag=True, help="Usar embeddings mock")
-def search(query: str, language: str | None, repo: str | None, top_k: int, mock_embeddings: bool):
+@click.pass_context
+def search(ctx: click.Context, query: str, language: str | None, repo: str | None, top_k: int):
     """Busca código relevante para una consulta."""
-    embedder, store = _get_components(mock_embeddings)
+    mock = ctx.obj.get("mock_embeddings", False)
+    embedder, store = _get_components(mock)
     retriever = Retriever(store, embedder)
 
     results = retriever.search(query, top_k=top_k, language=language, repo=repo)
@@ -101,7 +132,6 @@ def search(query: str, language: str | None, repo: str | None, top_k: int, mock_
 @click.option("--language", "-l", default=None)
 @click.option("--repo", "-r", default=None, help="Limitar a un repo (ruta del repositorio)")
 @click.option("--top-k", "-k", default=5, help="Número de fragmentos de contexto")
-@click.option("--mock-embeddings", is_flag=True, help="Usar embeddings mock")
 @click.option("--config", "-c", default=None, help="Ruta a archivo de configuración YAML")
 @click.option(
     "--model-select",
@@ -116,19 +146,21 @@ def search(query: str, language: str | None, repo: str | None, top_k: int, mock_
     default=None,
     help="Seleccionar modelo por nombre exacto",
 )
+@click.pass_context
 def ask(
+    ctx: click.Context,
     question: str,
     language: str | None,
     repo: str | None,
     top_k: int,
-    mock_embeddings: bool,
     config: str | None,
     model_select: int | None,
     model_name: str | None,
 ):
     """Haz una pregunta sobre el código indexado (RAG)."""
     _import_parsers()
-    embedder, store = _get_components(mock_embeddings)
+    mock = ctx.obj.get("mock_embeddings", False)
+    embedder, store = _get_components(mock)
     retriever = Retriever(store, embedder)
 
     app_config = load_config(config) if config else load_config()
@@ -155,7 +187,7 @@ def ask(
     llm = create_llm(app_config)
 
     rag = RAGPipeline(retriever, llm)
-    result = asyncio.run(rag.query(question, top_k=top_k, language=language, repo=repo))
+    result = _run_async(rag.query(question, top_k=top_k, language=language, repo=repo))
 
     console.print(f"\n[bold]Respuesta:[/bold]\n{result['answer']}\n")
 
@@ -175,13 +207,14 @@ def ask(
 @click.option("--repo", "-r", default=None, help="Limitar a un repo (ruta del repositorio)")
 @click.option("--language", "-l", default=None, help="Filtrar por lenguaje")
 @click.option("--top-k", "-k", default=5, help="Número de fragmentos")
-@click.option("--mock-embeddings", is_flag=True, help="Usar embeddings mock")
-def context(query: str, repo: str | None, language: str | None, top_k: int, mock_embeddings: bool):
+@click.pass_context
+def context(ctx: click.Context, query: str, repo: str | None, language: str | None, top_k: int):
     """Imprime contexto semántico listo para inyectar a un LLM (salida pipeable).
 
     Ej: copilota context "como se envia el email" -k 8 -r /ruta/repo > contexto.md
     """
-    embedder, store = _get_components(mock_embeddings)
+    mock = ctx.obj.get("mock_embeddings", False)
+    embedder, store = _get_components(mock)
     retriever = Retriever(store, embedder)
 
     results = retriever.search(query, top_k=top_k, language=language, repo=repo)
@@ -219,6 +252,16 @@ def models():
         marker = " ← actual" if mid == app_config.llm.model else ""
         table.add_row(str(i), f"{mid}{marker}")
     console.print(table)
+
+
+@main.command()
+@click.argument("repo_path", type=click.Path(exists=True))
+def delete(repo_path: str):
+    """Elimina todos los chunks de un repo de la base de vectores."""
+    store = VectorStore()
+    repo_id = resolve_repo(repo_path)
+    store.delete_by_repo(repo_id)
+    console.print(f"[green]✓[/green] Repo eliminado: [dim]{repo_id}[/dim]")
 
 
 @main.command()

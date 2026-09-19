@@ -8,14 +8,10 @@ from copilota.storage.vector_db import VectorStore
 
 
 @pytest.fixture
-def store():
-    s = VectorStore()
-    s.clear()
-    yield s
-    try:
-        s.clear()
-    except Exception:
-        pass
+def store(tmp_path, monkeypatch):
+    s = VectorStore(persist_directory=tmp_path / "chroma")
+    monkeypatch.setattr("copilota.cli.VectorStore", lambda *a, **kw: s)
+    return s
 
 
 def _seed(store: VectorStore):
@@ -40,7 +36,7 @@ class TestContextCommand:
     def test_context_prints_full_code(self, store):
         _seed(store)
         runner = CliRunner()
-        result = runner.invoke(main, ["context", "welcome email", "--mock-embeddings", "-k", "3"])
+        result = runner.invoke(main, ["--mock-embeddings", "context", "welcome email", "-k", "3"])
         assert result.exit_code == 0
         assert "send_welcome" in result.output
         assert "mailer.send" in result.output
@@ -49,7 +45,7 @@ class TestContextCommand:
     def test_context_repo_filter_excludes_other_repos(self, store):
         _seed(store)
         runner = CliRunner()
-        args = ["context", "welcome email", "--mock-embeddings", "-r", "/repo/other"]
+        args = ["--mock-embeddings", "context", "welcome email", "-r", "/repo/other"]
         result = runner.invoke(main, args)
         assert result.exit_code == 0
         assert "Fragmentos: 0" in result.output

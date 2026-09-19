@@ -1,35 +1,43 @@
-"""Parser para archivos PHP usando tree-sitter."""
+"""Parser para archivos TypeScript usando tree-sitter."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import tree_sitter_php as tsphp
+import tree_sitter_typescript as tsts
 from tree_sitter import Language, Node, Parser
 
 from copilota.parser.base import BaseParser
 from copilota.parser.registry import ParserRegistry
 from copilota.storage.models import ASTNode, NodeType
 
-TS_LANGUAGE = Language(tsphp.language_php())
+TS_LANGUAGE = Language(tsts.language_typescript())
+TSX_LANGUAGE = Language(tsts.language_tsx())
 
 
 @ParserRegistry.register
-class PHPParser(BaseParser):
+class TypeScriptParser(BaseParser):
     _ts_parser: "Parser | None" = None
+    _tsx_parser: "Parser | None" = None
 
     @property
     def language(self) -> str:
-        return "php"
+        return "typescript"
 
     @property
     def file_extensions(self) -> tuple[str, ...]:
-        return (".php",)
+        return (".ts", ".tsx")
 
     def parse_file(self, filepath: Path, source: str) -> list[ASTNode]:
-        if self._ts_parser is None:
-            self._ts_parser = Parser(TS_LANGUAGE)
-        tree = self._ts_parser.parse(source.encode())
+        if filepath.suffix == ".tsx":
+            if self._tsx_parser is None:
+                self._tsx_parser = Parser(TSX_LANGUAGE)
+            ts_parser = self._tsx_parser
+        else:
+            if self._ts_parser is None:
+                self._ts_parser = Parser(TS_LANGUAGE)
+            ts_parser = self._ts_parser
+        tree = ts_parser.parse(source.encode())
         nodes: list[ASTNode] = []
         self._walk(tree.root_node, source, str(filepath), nodes)
         return nodes
@@ -43,12 +51,15 @@ class PHPParser(BaseParser):
 
     def _to_ast_node(self, node, source: str, filepath: str) -> ASTNode | None:
         mapping: dict[str, NodeType] = {
-            "function_definition": NodeType.FUNCTION,
-            "method_declaration": NodeType.METHOD,
+            "function_declaration": NodeType.FUNCTION,
+            "method_definition": NodeType.METHOD,
             "class_declaration": NodeType.CLASS,
             "interface_declaration": NodeType.INTERFACE,
-            "namespace_definition": NodeType.MODULE,
-            "use_declaration": NodeType.IMPORT,
+            "type_alias_declaration": NodeType.STRUCT,
+            "enum_declaration": NodeType.ENUM,
+            "import_statement": NodeType.IMPORT,
+            "lexical_declaration": NodeType.VARIABLE,
+            "variable_declaration": NodeType.VARIABLE,
         }
         node_type = mapping.get(node.type)
         if not node_type:
@@ -67,8 +78,14 @@ class PHPParser(BaseParser):
 
     def _extract_name(self, node: Node) -> str | None:
         for child in node.children:
-            if child.type == "name":
+            if child.type in ("identifier", "property_identifier", "type_identifier"):
                 return child.text.decode()
+        if node.type in ("lexical_declaration", "variable_declaration"):
+            for decl in node.children:
+                if decl.type == "variable_declarator":
+                    for sub in decl.children:
+                        if sub.type == "identifier":
+                            return sub.text.decode()
         return None
 
     def get_chunk_text(self, node: ASTNode) -> str:

@@ -11,6 +11,9 @@ DEFAULT_SYSTEM_PROMPT = (
     "Cita archivos y líneas cuando sea posible."
 )
 
+MIN_SCORE_THRESHOLD = 0.0
+MAX_CONTEXT_CHARS = 8000
+
 
 class RAGPipeline:
     """Orquesta retrieval + generación con LLM."""
@@ -27,6 +30,8 @@ class RAGPipeline:
         repo: str | None = None,
     ) -> dict:
         results = self._retriever.search(question, top_k=top_k, language=language, repo=repo)
+
+        results = [r for r in results if r.score >= MIN_SCORE_THRESHOLD]
 
         context = self._build_context(results)
         prompt = self._build_prompt(question, context)
@@ -52,12 +57,21 @@ class RAGPipeline:
     @staticmethod
     def _build_context(results: list[RetrievalResult]) -> str:
         parts = []
+        total_chars = 0
         for i, r in enumerate(results, 1):
-            parts.append(f"--- Fragment {i} ---")
-            parts.append(f"File: {r.filepath}")
-            parts.append(f"Type: {r.node_type} | Name: {r.name}")
-            parts.append(r.document)
-            parts.append("")
+            header = (
+                f"--- Fragment {i} ---\nFile: {r.filepath}\n"
+                f"Type: {r.node_type} | Name: {r.name}\n"
+            )
+            doc = r.document
+            remaining = MAX_CONTEXT_CHARS - total_chars
+            if remaining <= 200:
+                break
+            if len(doc) > remaining:
+                doc = doc[:remaining] + "\n... [truncado]"
+            part = header + doc + "\n"
+            parts.append(part)
+            total_chars += len(part)
         return "\n".join(parts) if parts else "No se encontraron fragmentos relevantes."
 
     @staticmethod

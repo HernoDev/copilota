@@ -7,14 +7,9 @@ from copilota.storage.vector_db import VectorStore
 
 
 @pytest.fixture
-def store():
-    s = VectorStore()
-    s.clear()
+def store(tmp_path):
+    s = VectorStore(persist_directory=tmp_path / "chroma")
     yield s
-    try:
-        s.clear()
-    except Exception:
-        pass
 
 
 @pytest.fixture
