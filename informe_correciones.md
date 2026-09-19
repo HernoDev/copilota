@@ -184,3 +184,34 @@ Registro de problemas encontrados y resueltos durante la sesión de correcciones
 | `copilota --version` | `copilota, version 0.2.0` |
 | `copilota info` | 7 lenguajes, extensiones correctas, LLM openai |
 | `copilota --mock-embeddings search ...` | Funciona (tabla vacía con DB limpia) |
+
+---
+
+## T11: Fix taskrunner RAG plugin — binario no encontrado (bug en tasks-engine)
+
+**Problema existente:**
+- El plugin RAG de taskrunner (`plugins/rag/rag.sh`) recibía `RAG_BIN` desde la sección `## rag` de `plugins.md`, que tenía `RAG_BIN: ~/bin/copilota` — una ruta inexistente.
+- El `.config` global definía `COPILOTA_PATH=~/.local/copilota` pero esa variable **nunca se usaba**: el hook `before_prompt` resolvía `{config:RAG_BIN}` desde `plugins.md`, no desde `.config`.
+- Resultado: las 4 tareas de prueba se ejecutaron sin contexto RAG (log: "RAG: binario no encontrado; se omite el contexto RAG" ×10).
+
+**Resolución aplicada:**
+- Corregida `plugins.md` (en `~/.local/tasks-engine/` y `~/proyectos/tasks-engine/`): `RAG_BIN: ~/.local/copilota/bin/copilota` y `ASPECTOS_DIR: ~/proyectos/aspectos`.
+- Verificado que `copilota context` funciona y devuelve fragmentos indexados.
+- Re-ejecutada tarea 1 para confirmar que el retrieval RAG dispara correctamente.
+
+**Archivos modificados:** `~/.local/tasks-engine/plugins.md`, `~/proyectos/tasks-engine/plugins.md`
+
+---
+
+## T12: Fix agent_lib.sh — serialización de flags CLI (bug en tasks-engine)
+
+**Problema existente:**
+- `construir_flags_agente` imprimía los flags vía `printf '%s\n'` y `ejecutar_agente_cli` los leía línea por línea.
+- El system prompt de 35 líneas se convertía en 35 argumentos separados → Qwen Code CLI fallaba al parsear (mostraba help, exit 1).
+- Todas las tareas de taskrunner fallaban antes de ejecutar el agente.
+
+**Resolución aplicada:**
+- Reescrita `ejecutar_agente_cli` para construir un array `cmd_args` directamente con `case`, pasando `$sp_texto` como un solo elemento del array.
+- Sincronizado en `~/.local/tasks-engine/agent_lib.sh` y `~/proyectos/tasks-engine/agent_lib.sh`.
+
+**Archivos modificados:** `~/.local/tasks-engine/agent_lib.sh`, `~/proyectos/tasks-engine/agent_lib.sh`
