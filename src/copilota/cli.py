@@ -68,11 +68,21 @@ def _run_async(coro):
 @click.group()
 @click.version_option(pkg_version("copilota"), prog_name="copilota")
 @click.option("--mock-embeddings", is_flag=True, default=False, help="Usar embeddings mock")
+@click.option(
+    "--max-context-chars", default=8000, show_default=True,
+    help="Límite de chars del contexto",
+)
+@click.option(
+    "--min-score", default=0.0, show_default=True,
+    help="Score mínimo (0 = off)",
+)
 @click.pass_context
-def main(ctx: click.Context, mock_embeddings: bool):
+def main(ctx: click.Context, mock_embeddings: bool, max_context_chars: int, min_score: float):
     """Copilota - Asistente de código local con RAG."""
     ctx.ensure_object(dict)
     ctx.obj["mock_embeddings"] = mock_embeddings
+    ctx.obj["max_context_chars"] = max_context_chars
+    ctx.obj["min_score"] = min_score
 
 
 @main.command()
@@ -219,17 +229,33 @@ def context(ctx: click.Context, query: str, repo: str | None, language: str | No
 
     results = retriever.search(query, top_k=top_k, language=language, repo=repo)
 
+    max_context_chars = ctx.obj.get("max_context_chars", 8000)
+    min_score = ctx.obj.get("min_score", 0.0)
+
+    filtered = [r for r in results if r.score >= min_score]
+
     lines = [f'# Contexto de código — consulta: "{query}"']
     if repo:
         lines.append(f"# Repo: {resolve_repo(repo)}")
-    lines.append(f'# Fragmentos: {len(results)}')
-    for i, r in enumerate(results, 1):
+    lines.append(f'# Fragmentos: {len(filtered)}')
+
+    total_chars = 0
+    included = 0
+    for i, r in enumerate(filtered, 1):
+        doc = r.document.rstrip()
+        if total_chars + len(doc) > max_context_chars and included > 0:
+            break
+        if len(doc) > max_context_chars:
+            doc = doc[:max_context_chars - 50] + "\n... [truncado]"
+        total_chars += len(doc)
+        included += 1
         lines.append("")
-        lines.append(f"## [{i}] {r.name} ({r.node_type}) — {r.filepath} [{r.language}]")
+        lines.append(f"## [{included}] {r.name} ({r.node_type}) — {r.filepath} [{r.language}]")
         fence = "js" if r.language in ("javascript", "typescript") else r.language
         lines.append(f"```{fence}")
-        lines.append(r.document.rstrip())
+        lines.append(doc)
         lines.append("```")
+
     print("\n".join(lines))
 
 
